@@ -119,6 +119,9 @@ type WorkerPool struct {
 - **Task prioritization**: Implement priority levels for tasks (e.g., High, Medium, Low priority).
 - **Logging / metrics**: Integrate logging and metrics for monitoring pool performance and health.
 - **Pluggable queue strategies**: Support different queue types such as FIFO (First In, First Out), LIFO (Last In, First Out), and priority-based queues.
+- **Failure handling**: If a task fails, you can:
+  - **Throw it away**: Discard the task if it’s not critical or has failed too many times.
+  - **Add to a retry queue**: Place the failed task in a separate retry queue for future attempts. This can be based on a backoff strategy or maximum retry count.
 
 ---
 
