@@ -180,11 +180,6 @@ Yes — **the nature of your jobs (CPU-bound vs. I/O-bound)** significantly affe
 ---
 
 ## ⚠️ Go Runtime Note
-Here’s that section, rewritten and formatted to fit cleanly into a `README.md`:
-
----
-
-## ⚠️ Go Runtime Note
 
 The Go scheduler is **cooperative** and **preemptive** (as of Go 1.14+), but **long-running CPU-bound goroutines can still monopolize execution**, starving other goroutines.
 
