@@ -39,6 +39,17 @@ Let’s compare:
 
 ---
 
+## 🧩 Component Breakdown
+
+| Component       | Description                                                |
+|-----------------|------------------------------------------------------------|
+| **Worker**      | Executes tasks from its local queue. When idle, attempts to steal tasks from peers. |
+| **Dispatcher**  | Assigns incoming tasks to workers, preferring those that are lightly loaded or idle. |
+| **Local Queue** | Each worker maintains a double-ended queue (deque) for storing its tasks. |
+| **Stealer Logic**| When a worker's local queue is empty, it tries to steal tasks from other workers' queues before idling or shutting down. |
+
+---
+
 ## ⚙️ Example Structs
 
 Here’s a simple example of how the worker pool might be structured:
@@ -46,29 +57,32 @@ Here’s a simple example of how the worker pool might be structured:
 ```go
 type Job func()
 
+// Worker executes tasks from its local queue and can steal from others.
 type Worker struct {
-    id       int
-    jobQueue chan Job
-    pool     *WorkerPool
-    quit     chan struct{}
+	id         int
+	queue      chan Job
+	quit       chan struct{}
+	pool       *WorkerPool
+	lastActive time.Time // Use with idleTimeout
 }
 
+// WorkerPool manages workers, task distribution, and scaling.
 type WorkerPool struct {
-    minWorkers int // Initialize number of workers
-    maxWorkers int // Able to scale as load grows
-    threshold  int // Average jobs per worker before scaling
-    mu          sync.Mutex
-    workers     []*Worker
-    jobCounter  int32
+	minWorkers    int
+	maxWorkers    int
+	threshold     int
+	idleTimeout   time.Duration // Periodically check lastActive of worker
+	mu            sync.Mutex
+	workers       []*Worker
+	globalQueue   chan Job // For centralized fallback, if queue for each worker is full
+	dispatcherWg  sync.WaitGroup
+	scaleTicker   *time.Ticker // Periodically check to scale (increase / reduce) number of workers
 }
 ```
 
 - **Job** represents the work each worker will do.
 - **Worker** has its own queue (`jobQueue`) and communicates with the pool.
 - **WorkerPool** manages worker scaling, job counting, and overall coordination.
-
----
-Certainly! Here's the **Scalability Strategy** section formatted for your README:
 
 ---
 
@@ -107,3 +121,5 @@ Certainly! Here's the **Scalability Strategy** section formatted for your README
 - **Pluggable queue strategies**: Support different queue types such as FIFO (First In, First Out), LIFO (Last In, First Out), and priority-based queues.
 
 ---
+
+This README now outlines the design of a scalable and efficient worker pool, highlighting the components, scalability strategies, and potential enhancements in a clear and structured way. Feel free to further expand on any section or add more specifics to tailor it to your needs!
