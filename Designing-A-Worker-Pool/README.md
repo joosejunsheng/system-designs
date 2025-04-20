@@ -122,4 +122,107 @@ type WorkerPool struct {
 
 ---
 
-This README now outlines the design of a scalable and efficient worker pool, highlighting the components, scalability strategies, and potential enhancements in a clear and structured way. Feel free to further expand on any section or add more specifics to tailor it to your needs!
+Yes — **the nature of your jobs (CPU-bound vs. I/O-bound)** significantly affects the **design** and **tuning** of your concurrent worker pool and scheduler logic. Here's how:
+
+---
+
+## ⚙️ CPU-bound vs I/O-bound: What's the Difference?
+
+| Type      | Characteristics                                                                 |
+|-----------|-----------------------------------------------------------------------------------|
+| **CPU-bound** | Tasks consume CPU cycles (e.g., video encoding, image processing, encryption). |
+| **I/O-bound** | Tasks spend most time waiting for I/O (e.g., database queries, file reads, HTTP requests). |
+
+---
+
+## 🔥 If Jobs Are **CPU-Intensive**:
+
+### 🧠 Scheduler Design Considerations
+
+1. **Worker Count ≈ NumCPU (GOMAXPROCS)**  
+   - You want to **avoid spawning more workers than available cores**.
+   - More workers cause **context switching** and **CPU cache thrashing**, reducing performance.
+
+2. **Smaller queues per worker**  
+   - CPU-bound tasks take longer to complete. Big queues just delay everything.
+   - Better to **process fewer jobs concurrently** but faster. (Also to prevent context switching)
+
+3. **Stealing becomes rare**  
+   - Tasks take long, so stealing isn't as effective — most workers are busy.
+   - You may **de-prioritize complex steal logic**.
+
+4. **Avoid dynamic scaling up**  
+   - Scaling beyond CPU limit won’t help, since CPU is the bottleneck.
+   - Focus instead on **distributing tasks efficiently** across a fixed set of workers.
+
+---
+
+## 🌊 If Jobs Are **I/O-Intensive**:
+
+### 📡 Scheduler Design Considerations
+
+1. **More workers than CPUs**  
+   - Since tasks are often blocked on I/O, you can afford to **oversubscribe** CPU.
+   - You might spawn **4x or 10x GOMAXPROCS** workers.
+
+2. **Larger queues**  
+   - Workers will spend time waiting on I/O, so it’s fine to queue up more jobs.
+   - Workers will eventually pick them up as I/O completes.
+
+3. **Stealing is helpful**  
+   - Workers idle frequently, so **task stealing helps balance load** dynamically.
+   - Implement a **fair but efficient steal algorithm** (e.g., steal half from longest queue).
+
+4. **Aggressive scaling**  
+   - Scaling up quickly makes sense — I/O won't block CPU.
+   - Can scale down slowly to avoid oscillation.
+
+---
+
+## ⚠️ Go Runtime Note
+Here’s that section, rewritten and formatted to fit cleanly into a `README.md`:
+
+---
+
+## ⚠️ Go Runtime Note
+
+The Go scheduler is **cooperative** and **preemptive** (as of Go 1.14+), but **long-running CPU-bound goroutines can still monopolize execution**, starving other goroutines.
+
+To stay responsive:
+
+- **Insert `runtime.Gosched()`** inside heavy loops.
+- Or **break the work into smaller chunks**.
+
+This gives the scheduler a chance to pause your goroutine and let others run.
+
+### 🧪 Example: Yielding in a CPU-Bound Task
+
+```go
+func cpuHeavyTask() {
+    for i := 0; i < 1e9; i++ {
+        // Simulate expensive CPU work
+
+        if i % 10000 == 0 {
+            // Yield to the scheduler
+            runtime.Gosched()
+        }
+    }
+}
+```
+
+---
+
+Let me know if you’d like to add a benchmark or comparison showing the impact with and without `Gosched()`!
+
+## ✅ Summary
+
+| Aspect              | CPU-Intensive Jobs                           | I/O-Intensive Jobs                          |
+|---------------------|----------------------------------------------|---------------------------------------------|
+| Max Workers         | Close to `GOMAXPROCS`                        | Can be 4x–10x `GOMAXPROCS`                  |
+| Task Duration       | Long                                         | Short (but often blocked)                  |
+| Stealing            | Rarely useful                                | Very useful                                 |
+| Scaling Up          | Conservative                                 | Aggressive                                  |
+| Queue Size          | Small                                        | Larger queues acceptable                    |
+| Resource Bottleneck | CPU                                          | Network, disk, DB, etc.                     |
+
+---
